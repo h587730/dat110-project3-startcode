@@ -63,6 +63,11 @@ public class FileManager {
 		// hash the replica
 		
 		// store the hash in the replicafiles array.
+		
+		for (int i = 0; i < Util.numReplicas; i++) {
+
+			replicafiles[i] = Hash.hashOf(filename+i);
+		}
 
 	}
 	
@@ -90,6 +95,22 @@ public class FileManager {
     	
     	// increment counter
     	
+    	createReplicaFiles();
+
+		int primary = new Random().nextInt(Util.numReplicas-1);
+
+		for (int i = 0; i < replicafiles.length; i++) {
+
+			NodeInterface succ = chordnode.findSuccessor(replicafiles[i]);
+
+			succ.addKey(replicafiles[i]);
+
+			succ.saveFileContent(filename, replicafiles[i], bytesOfFile, counter==primary);
+
+		
+			counter++;
+		}
+    	
     		
 		return counter;
     }
@@ -116,6 +137,19 @@ public class FileManager {
 		
 		// save the metadata in the set succinfo.
 		
+
+				createReplicaFiles();
+
+				for (int i = 0; i < replicafiles.length; i++) {
+
+					NodeInterface succNodeInterface = chordnode.findSuccessor(replicafiles[i]);
+
+					Message message = succNodeInterface.getFilesMetadata(replicafiles[i]);
+
+					succinfo.add(message);
+				}
+		
+		
 		this.activeNodesforFile = succinfo;
 		
 		return succinfo;
@@ -136,6 +170,14 @@ public class FileManager {
 		// use the primaryServer boolean variable contained in the Message class to check if it is the primary or not
 		
 		// return the primary
+		
+		for (Message msg:activeNodesforFile) {
+
+			if(msg.isPrimaryServer()){
+
+				return Util.getProcessStub(msg.getNodeIP(), msg.getPort());
+			}
+		}
 		
 		return null; 
 	}
