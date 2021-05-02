@@ -101,24 +101,52 @@ public class MutualExclusion {
 		// obtain a stub for each node from the registry
 		
 		// call onMutexRequestReceived()
-		
+
+		for (Message msg : activenodes) {
+
+			NodeInterface stub = Util.getProcessStub(msg.getNodeIP(), msg.getPort());
+
+			stub.onMutexRequestReceived(message);
+		}
+
+
 	}
 	
 	public void onMutexRequestReceived(Message message) throws RemoteException {
-		
+
 		// increment the local clock
-		
+
 		// if message is from self, acknowledge, and call onMutexAcknowledgementReceived()
-			
+		clock.increment();
+
+		if(message.getNodeIP().equals(node.getNodeName())){
+			message.setAcknowledged(true);
+			onMutexAcknowledgementReceived(message);
+		}
+
+
 		int caseid = -1;
-		
 		// write if statement to transition to the correct caseid
+
 		// caseid=0: Receiver is not accessing shared resource and does not want to (send OK to sender)
+		if(!WANTS_TO_ENTER_CS && !CS_BUSY){
+
+			caseid = 0;
+		}
 		// caseid=1: Receiver already has access to the resource (dont reply but queue the request)
+		else if(CS_BUSY){
+
+			caseid = 1;
+		}
 		// caseid=2: Receiver wants to access resource but is yet to - compare own message clock to received message's clock
-		
+		else if(WANTS_TO_ENTER_CS){
+
+			caseid = 2;
+		}
+
 		// check for decision
 		doDecisionAlgorithm(message, mutexqueue, caseid);
+
 	}
 	
 	public void doDecisionAlgorithm(Message message, List<Message> queue, int condition) throws RemoteException {
@@ -133,7 +161,11 @@ public class MutualExclusion {
 				// get a stub for the sender from the registry
 				// acknowledge message
 				// send acknowledgement back by calling onMutexAcknowledgementReceived()
-				
+
+				NodeInterface stub = Util.getProcessStub(procName, port);
+				message.setAcknowledged(true);
+				stub.onMutexAcknowledgementReceived(message);
+
 				break;
 			}
 		
@@ -141,6 +173,7 @@ public class MutualExclusion {
 			case 1: {
 				
 				// queue this message
+				queue.add(message);
 				break;
 			}
 			
@@ -149,13 +182,34 @@ public class MutualExclusion {
 			 *  the message with lower timestamp wins) - send OK if received is lower. Queue message if received is higher
 			 */
 			case 2: {
+
 				// check the clock of the sending process
 				// own clock for the multicast message
+
+				int sendClock = message.getClock();
+
+				int ownClock = node.getMessage().getClock();
+
+
 				// compare clocks, the lowest wins
-				// if clocks are the same, compare nodeIDs, the lowest wins
+
 				// if sender wins, acknowledge the message, obtain a stub and call onMutexAcknowledgementReceived()
+				// if clocks are the same, compare nodeIDs, the lowest wins
 				// if sender looses, queue it
-				
+
+				if(sendClock < ownClock || (sendClock == ownClock && message.getNodeID().compareTo(node.getNodeID()) < 0)){
+
+					NodeInterface stub = Util.getProcessStub(procName, port);
+
+					message.setAcknowledged(true);
+
+					stub.onMutexAcknowledgementReceived(message);
+				}
+
+				else{
+
+					queue.add(message);
+				}
 				
 
 				break;
@@ -169,26 +223,35 @@ public class MutualExclusion {
 	public void onMutexAcknowledgementReceived(Message message) throws RemoteException {
 		
 		// add message to queueack
-		
+		queueack.add(message);
 	}
 	
 	// multicast release locks message to other processes including self
-	public void multicastReleaseLocks(Set<Message> activenodes) {
-		
+	public void multicastReleaseLocks(Set<Message> activenodes) throws RemoteException {
+
 		// iterate over the activenodes
-		
-		// obtain a stub for each node from the registry
-		
-		// call releaseLocks()
+		for (Message msg : activenodes) {
+
+			// obtain a stub for each node from the registry
+			NodeInterface stub = Util.getProcessStub(msg.getNodeIP(), msg.getPort());
+
+			// call releaseLocks()
+			stub.releaseLocks();
+		}
 	
 	}
 	
 	private boolean areAllMessagesReturned(int numvoters) throws RemoteException {
+
 		// check if the size of the queueack is same as the numvoters
-		
 		// clear the queueack
-		
 		// return true if yes and false if no
+
+		if(queueack.size() == numvoters){
+
+			queueack.clear();
+			return true;
+		}
 
 		return false;
 	}
